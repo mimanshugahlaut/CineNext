@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CineNext — Movie & Web Series Recommendations</title>
+  <meta name="description" content="Discover trending movies and web series, get smart recommendations, and build your personal watchlist with CineNext." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
+  <link rel="stylesheet" href="styles.css?v=20260401" />
+</head>
+<body>
+
+  <!-- ——— Auth Screen ——— -->
+  <div class="auth-screen" id="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span>🎬 CINENEXT</span>
+      </div>
+      <p class="auth-tagline">Your intelligent cinema companion</p>
+
+      <div class="auth-message" id="auth-message"></div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-auth-tab="login" id="auth-tab-login">LOGIN</button>
+        <button class="auth-tab" data-auth-tab="signup" id="auth-tab-signup">SIGN UP</button>
+      </div>
+
+      <!-- Login Form -->
+      <form class="auth-form" id="login-form" novalidate>
+        <div class="auth-field">
+          <label for="login-email">Email</label>
+          <input class="auth-input" type="email" id="login-email" placeholder="you@example.com" required />
+          <div class="auth-error" id="login-email-error"></div>
+        </div>
+        <div class="auth-field">
+          <label for="login-password">Password</label>
+          <input class="auth-input" type="password" id="login-password" placeholder="••••••••" required />
+          <div class="auth-error" id="login-password-error"></div>
+        </div>
+        <button type="submit" class="auth-submit" id="login-submit">LOGIN</button>
+      </form>
+      <button type="button" class="auth-google-btn" id="google-signin-btn">Continue with Google</button>
+
+      <!-- Signup Form (hidden by default) -->
+      <form class="auth-form hidden" id="signup-form" novalidate>
+        <div class="auth-field">
+          <label for="signup-name">Full Name</label>
+          <input class="auth-input" type="text" id="signup-name" placeholder="John Doe" required />
+          <div class="auth-error" id="signup-name-error"></div>
+        </div>
+        <div class="auth-field">
+          <label for="signup-email">Email</label>
+          <input class="auth-input" type="email" id="signup-email" placeholder="you@example.com" required />
+          <div class="auth-error" id="signup-email-error"></div>
+        </div>
+        <div class="auth-field">
+          <label for="signup-password">Password</label>
+          <input class="auth-input" type="password" id="signup-password" placeholder="Min 6 characters" required />
+          <div class="auth-error" id="signup-password-error"></div>
+          <div class="password-strength" id="password-strength">
+            <div class="password-strength-bar" id="str-bar-1"></div>
+            <div class="password-strength-bar" id="str-bar-2"></div>
+            <div class="password-strength-bar" id="str-bar-3"></div>
+            <div class="password-strength-bar" id="str-bar-4"></div>
+          </div>
+          <div class="password-strength-text" id="password-strength-text"></div>
+        </div>
+        <div class="auth-field">
+          <label for="signup-confirm">Confirm Password</label>
+          <input class="auth-input" type="password" id="signup-confirm" placeholder="••••••••" required />
+          <div class="auth-error" id="signup-confirm-error"></div>
+        </div>
+        <button type="submit" class="auth-submit" id="signup-submit">CREATE ACCOUNT</button>
+      </form>
+
+      <!-- Guest access -->
+      <div class="auth-divider"><span>OR</span></div>
+      <button class="auth-guest-btn" id="auth-guest-btn">👀 Continue as Guest</button>
+
+    </div>
+  </div>
+
+
+  <!-- ——— Profile Modal ——— -->
+  <div class="profile-modal-overlay hidden" id="profile-modal-overlay">
+    <div class="profile-modal">
+      <button class="modal-close" id="profile-close">✖</button>
+      <div class="profile-header">
+        <div class="profile-avatar" id="profile-avatar"></div>
+        <div class="profile-info">
+          <h2 class="profile-name" id="profile-name"></h2>
+          <p class="profile-email" id="profile-email"></p>
+          <p class="profile-joined" id="profile-joined"></p>
+        </div>
+      </div>
+      <div class="profile-stats" id="profile-stats"></div>
+      <div class="profile-section" id="profile-favourites-section">
+        <h3 class="section-label">❤️ MY FAVOURITES</h3>
+        <div class="profile-grid" id="profile-favourites-grid"></div>
+      </div>
+      <div class="profile-section" id="profile-watched-section">
+        <h3 class="section-label">✅ WATCHED</h3>
+        <div class="profile-grid" id="profile-watched-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ——— Navbar ——— -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-inner">
+      <a href="#" class="logo" id="logo-link">
+        <span class="logo-icon">🎬</span>
+        CINENEXT
+      </a>
+
+      <div class="search-wrapper">
+        <input
+          type="text"
+          class="search-input"
+          id="search-input"
+          placeholder="Search movies & shows…"
+          autocomplete="off"
+        />
+        <span class="search-icon">🔍</span>
+      </div>
+
+      <div class="nav-actions">
+        <button class="nav-btn" id="discover-btn">
+          ✨ <span class="btn-label">Discover</span>
+        </button>
+        <div class="genre-dropdown">
+          <button class="nav-btn" id="genre-btn">
+            🎭 <span class="btn-label">Genre</span>
+          </button>
+          <div class="genre-menu" id="genre-menu"></div>
+        </div>
+        <button class="nav-btn" id="watchlist-btn">
+          📋 <span class="btn-label">Watchlist</span>
+          <span class="watchlist-count" id="watchlist-count">0</span>
+        </button>
+
+        <!-- User Profile -->
+        <div class="nav-user" id="nav-user">
+          <div class="nav-user-avatar" id="nav-user-avatar"></div>
+          <span class="nav-user-name" id="nav-user-name"></span>
+          <div class="user-dropdown" id="user-dropdown">
+            <div class="user-dropdown-header">
+              <div class="nav-user-name" id="dropdown-user-name" style="max-width:none;font-weight:600;margin-bottom:4px;"></div>
+              <div class="user-dropdown-email" id="dropdown-user-email"></div>
+            </div>
+            <div class="user-dropdown-item" id="dropdown-profile">👤 My Profile</div>
+            <div class="user-dropdown-item logout" id="dropdown-logout">🚫 Sign Out</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ——— Hero Section ——— -->
+  <section class="hero" id="hero">
+    <div class="particles" id="particles"></div>
+    <div class="hero-content">
+      <h1>DISCOVER YOUR NEXT OBSESSION</h1>
+      <p>Smart recommendations for movies & web series, powered by real-time data. Find what to watch next.</p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-value" id="stat-movies">900K+</div>
+          <div class="hero-stat-label">Movies</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value" id="stat-shows">170K+</div>
+          <div class="hero-stat-label">TV Shows</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value" id="stat-genres">19</div>
+          <div class="hero-stat-label">Genres</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ——— Content Type Tabs ——— -->
+  <div class="section" style="padding-bottom: 0;">
+    <div class="content-tabs" id="content-tabs">
+      <button class="content-tab active" data-tab="movies">🎬 Movies</button>
+      <button class="content-tab" data-tab="tv">📺 TV Shows</button>
+      <button class="content-tab" data-tab="bollywood">🇮🇳 Bollywood</button>
+    </div>
+  </div>
+
+  <!-- ——— Personalized Recommendations (hidden by default, appears for logged-in users) ——— -->
+  <section class="section hidden" id="recommended-section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title"><span class="emoji">✨</span> RECOMMENDED FOR YOU</h2>
+        <p class="section-subtitle">Based on your watchlist & preferences</p>
+      </div>
+    </div>
+    <div class="card-grid" id="recommended-grid"></div>
+  </section>
+
+  <!-- ——— Search Results (hidden by default) ——— -->
+  <section class="section hidden" id="search-results-section">
+    <div class="search-results-header">
+      <div class="search-results-info">
+        <div>
+          <h2 class="section-title">Results for "<span id="search-query-display"></span>"</h2>
+          <p class="section-subtitle" id="search-results-meta">Search across movies and TV shows.</p>
+        </div>
+      </div>
+      <button class="clear-search" id="clear-search-btn">✖ Clear</button>
+    </div>
+    <div class="card-grid" id="search-results-grid"></div>
+    <div class="center"><button class="btn btn-primary hidden" id="search-load-more">Load More</button></div>
+  </section>
+
+  <!-- ——— Genre Results (hidden by default) ——— -->
+  <section class="section hidden" id="genre-results-section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title"><span class="emoji">🎭</span> <span id="genre-name-display"></span></h2>
+        <p class="section-subtitle">Exploring titles in this genre</p>
+      </div>
+      <button class="clear-search" id="clear-genre-btn">✖ Clear Filter</button>
+    </div>
+    <div class="card-grid" id="genre-results-grid"></div>
+  </section>
+
+  <!-- ——— Trending Section ——— -->
+  <section class="section" id="trending-section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title"><span class="emoji">🔥</span> TRENDING NOW</h2>
+        <p class="section-subtitle" id="trending-subtitle">This week's most popular movies</p>
+      </div>
+      <span class="section-badge">LIVE</span>
+    </div>
+    <div class="card-grid" id="trending-grid"></div>
+  </section>
+
+  <!-- ——— Top Rated Section ——— -->
+  <section class="section" id="top-rated-section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title"><span class="emoji">⭐</span> TOP RATED</h2>
+        <p class="section-subtitle" id="top-rated-subtitle">The highest rated movies of all time</p>
+      </div>
+    </div>
+    <div class="card-grid" id="top-rated-grid"></div>
+  </section>
+
+  <!-- ——— Upcoming Section ——— -->
+  <section class="section" id="upcoming-section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title"><span class="emoji">🎯</span> <span id="upcoming-title">COMING SOON</span></h2>
+        <p class="section-subtitle" id="upcoming-subtitle">Upcoming movies to keep an eye on</p>
+      </div>
+    </div>
+    <div class="card-grid" id="upcoming-grid"></div>
+  </section>
+
+  <!-- ——— Discover Section ——— -->
+  <section class="section hidden" id="discover-section">
+    <div class="discover-container">
+      <!-- Filter Sidebar -->
+      <aside class="filter-sidebar">
+        <div class="filter-group">
+          <label class="filter-label">SORT BY</label>
+          <select class="filter-select" id="discover-sort">
+            <option value="popularity.desc">Most Popular</option>
+            <option value="vote_average.desc">Top Rated</option>
+            <option value="primary_release_date.desc">Newest First</option>
+            <option value="primary_release_date.asc">Oldest First</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">TYPE</label>
+          <div class="filter-toggle-group">
+            <button class="filter-toggle active" data-type="movie">Movies</button>
+            <button class="filter-toggle" data-type="tv">TV Shows</button>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">RELEASE YEAR</label>
+          <div class="filter-row">
+            <input type="number" class="filter-input" id="year-from" placeholder="From" min="1900" max="2030">
+            <span>-</span>
+            <input type="number" class="filter-input" id="year-to" placeholder="To" min="1900" max="2030">
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">MIN RATING (⭐ <span id="rating-val">0</span>)</label>
+          <input type="range" class="filter-range" id="filter-rating" min="0" max="10" step="1" value="0">
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">GENRES</label>
+          <div class="filter-chips" id="discover-genres">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <button class="filter-reset-btn" id="filter-reset">RESET FILTERS</button>
+      </aside>
+
+      <!-- Results Area -->
+      <div class="discover-results">
+        <div class="discover-results-header">
+          <div>
+            <h2 class="section-title"><span class="emoji">✨</span> DISCOVER</h2>
+            <p class="section-subtitle" id="discover-results-meta">Curated results will appear here as you tune the filters.</p>
+          </div>
+        </div>
+        <div class="card-grid" id="discover-grid"></div>
+        <div class="load-more-container">
+          <button class="load-more-btn hidden" id="load-more-btn">LOAD MORE</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ——— Detail Modal ——— -->
+  <div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal" id="modal">
+      <div class="modal-hero">
+        <img class="modal-backdrop-img" id="modal-backdrop-img" alt="" />
+        <div class="modal-hero-gradient"></div>
+        <div class="modal-hero-content">
+          <img class="modal-poster" id="modal-poster" alt="" />
+          <div class="modal-title-block">
+            <h2 class="modal-title" id="modal-title"></h2>
+            <div class="modal-meta-tags" id="modal-meta-tags"></div>
+          </div>
+        </div>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-actions" id="modal-actions">
+          <button class="modal-action-btn secondary" id="modal-watchlist-btn">📋 Add to Watchlist</button>
+          <button class="modal-action-btn secondary" id="modal-watched-btn">👁️ Watched</button>
+          <button class="modal-action-btn secondary" id="modal-favourite-btn">❤️ Favourite</button>
+        </div>
+        <div class="ratings-bar hidden" id="ratings-bar"></div>
+        <p class="modal-overview" id="modal-overview"></p>
+
+        <div class="trailer-section hidden" id="trailer-section">
+          <h3 class="section-label">🎥 TRAILER</h3>
+          <div class="trailer-container" id="trailer-container"></div>
+        </div>
+
+        <div class="hidden" id="cast-section">
+          <h3 class="section-label">🎭 CAST</h3>
+          <div class="cast-scroll" id="cast-scroll"></div>
+        </div>
+
+        <div class="hidden" id="director-section">
+          <h3 class="section-label">🎬 DIRECTOR</h3>
+          <div class="cast-scroll" id="director-scroll"></div>
+        </div>
+
+        <div class="hidden" id="watch-providers-section">
+          <h3 class="section-label">📺 WHERE TO WATCH</h3>
+          <div id="watch-providers-content"></div>
+        </div>
+
+        <div class="hidden" id="seasons-section">
+          <h3 class="section-label">📂 SEASONS</h3>
+          <div id="seasons-content"></div>
+        </div>
+
+        <!-- Review Section -->
+        <div class="review-section" id="review-section">
+          <h3 class="section-label">✍️ REVIEWS</h3>
+          <div class="review-form" id="review-form">
+            <div class="review-star-picker" id="review-star-picker">
+              <button class="review-star" data-star="1">⭐</button>
+              <button class="review-star" data-star="2">⭐</button>
+              <button class="review-star" data-star="3">⭐</button>
+              <button class="review-star" data-star="4">⭐</button>
+              <button class="review-star" data-star="5">⭐</button>
+            </div>
+            <textarea class="review-textarea" id="review-textarea" placeholder="Write your review… What did you think of this title?"></textarea>
+            <button class="review-submit" id="review-submit" disabled>POST REVIEW</button>
+          </div>
+          <div class="reviews-list" id="reviews-list"></div>
+        </div>
+
+        <div class="hidden" id="similar-section">
+          <h3 class="section-label">💡 YOU MIGHT ALSO LIKE</h3>
+          <div class="similar-grid" id="similar-grid"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Watchlist Drawer -->
+  <div class="drawer-overlay" id="drawer-overlay"></div>
+  <aside class="watchlist-drawer" id="watchlist-drawer">
+    <div class="drawer-header">
+      <h3 class="drawer-title">📋 MY WATCHLIST</h3>
+      <button class="drawer-close" id="drawer-close">✕</button>
+    </div>
+    <div class="drawer-body" id="drawer-body">
+      <div class="drawer-empty" id="drawer-empty">
+        <div class="drawer-empty-icon">📋</div>
+        <p>Your watchlist is empty.</p>
+        <p style="margin-top:8px;font-size:0.82rem;">Click the icon on any title to save it here.</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- AI Movie Concierge -->
+  <button class="smart-match-fab" id="smart-match-fab">🤖 AI Concierge</button>
+
+  <div class="concierge-overlay hidden" id="concierge-overlay">
+    <div class="concierge-container">
+      <div class="concierge-header">
+        <div class="concierge-header-info">
+          <div class="concierge-avatar">🤖</div>
+          <div>
+            <div class="concierge-title">AI Movie Concierge</div>
+            <div class="concierge-subtitle">Powered by CineNext ML</div>
+          </div>
+        </div>
+        <button class="concierge-close" id="concierge-close">✕</button>
+      </div>
+      <div class="concierge-hero">
+        <div class="concierge-hero-copy">
+          <div class="concierge-eyebrow">Conversation-based recommendations</div>
+          <h2 class="concierge-hero-title">Describe a vibe, a genre, or a specific kind of night.</h2>
+          <p class="concierge-hero-text">The concierge can narrow by mood, avoid genres you dislike, and suggest movies or shows with quick follow-up refinement.</p>
+        </div>
+        <div class="concierge-prompt-chips" id="concierge-prompt-chips">
+          <button type="button" class="concierge-prompt-chip" data-prompt="Give me a mind-bending sci-fi movie with strong visuals.">Mind-bending sci-fi</button>
+          <button type="button" class="concierge-prompt-chip" data-prompt="Suggest a light comedy for a relaxed evening.">Light comedy</button>
+          <button type="button" class="concierge-prompt-chip" data-prompt="Recommend a tense thriller without supernatural elements.">Grounded thriller</button>
+          <button type="button" class="concierge-prompt-chip" data-prompt="I want a stylish crime series with smart writing.">Crime series</button>
+        </div>
+      </div>
+      <div class="concierge-messages" id="concierge-messages"></div>
+      <div class="concierge-input-bar">
+        <input type="text" id="concierge-input" class="concierge-input" placeholder="Tell me what you're in the mood for..." autocomplete="off">
+        <button id="concierge-send" class="concierge-send" aria-label="Send">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onboarding -->
+  <div class="onboarding-overlay hidden" id="onboarding-overlay">
+    <div class="onboarding-card">
+      <button class="onboarding-close" id="onboarding-close" aria-label="Close onboarding">✕</button>
+      <div class="onboarding-eyebrow">WELCOME TO CINENEXT</div>
+      <h2 class="onboarding-title">Your quickest path from "what should I watch?" to a real answer.</h2>
+      <p class="onboarding-copy">Use Discover for fast filtering, Search for a specific title, and AI Concierge when you want a conversational movie advisor.</p>
+      <div class="onboarding-steps">
+        <div class="onboarding-step">
+          <div class="onboarding-step-title">Discover</div>
+          <p>Filter by type, year, rating, and genre until the grid feels dialed in.</p>
+        </div>
+        <div class="onboarding-step">
+          <div class="onboarding-step-title">Save Your Queue</div>
+          <p>Tap the watchlist action on any card to build a shortlist you can actually come back to.</p>
+        </div>
+        <div class="onboarding-step">
+          <div class="onboarding-step-title">AI Concierge</div>
+          <p>Chat naturally - describe your mood, refine your taste, and get personalized picks in a conversation.</p>
+        </div>
+      </div>
+      <button class="onboarding-cta" id="onboarding-cta">Start Exploring</button>
+    </div>
+  </div>
+
+  <nav class="mobile-nav" id="mobile-nav">
+    <button class="mobile-nav-item active" id="mobile-nav-home" aria-label="Home">
+      <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="mobile-nav-item" id="mobile-nav-discover" aria-label="Discover">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+      <span>Discover</span>
+    </button>
+    <button class="mobile-nav-item" id="mobile-nav-smart" aria-label="AI Concierge">
+      <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+      <span>Concierge</span>
+    </button>
+    <button class="mobile-nav-item" id="mobile-nav-profile" aria-label="Profile">
+      <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+      <span>Profile</span>
+    </button>
+  </nav>
+
+  <footer class="footer">
+    <div class="footer-logo">🎬 CINENEXT</div>
+    <p>Powered by TMDB API</p>
+  </footer>
+
+  <canvas id="color-extract-canvas" width="50" height="75"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+  <script src="app.js?v=20260401"></script>
+</body>
+</html>

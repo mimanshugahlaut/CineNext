@@ -1,0 +1,44 @@
+# Environment files (keep template committed)
+.env
+.env.local
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+.venv-*/
+venv/
+
+# Python cache and build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node dependencies and build artifacts
+node_modules/
+dist/
+build/
+
+# Test outputs
+playwright-report/
+test-results/
+tmp_log.txt
+*.log
+
+# Editor and local tooling metadata
+.vscode/
+.idea/
+.agents/
+.sixth/
+.streamlit/
+
+# OS/editor temp files
+*.swp
+*.swo

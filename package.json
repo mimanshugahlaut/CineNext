@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "start:web": "python -m http.server 3000",
+    "start:ml": "python ml_server/server.py"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.101.1"
+  }
+}
