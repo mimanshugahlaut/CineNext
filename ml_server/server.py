@@ -21,11 +21,12 @@ import sys
 import logging
 import json
 import time
+from pathlib import Path
 import requests
 import numpy as np
 import pandas as pd
 from functools import lru_cache
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -74,6 +75,8 @@ limiter = Limiter(
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
 # ---- TMDB Helpers (with caching) --------------------------------------------
 @lru_cache(maxsize=512)
 def tmdb_get_cached(path: str, params_key: str) -> dict:
@@ -925,9 +928,24 @@ def generate_concierge_reply(user_msg, recs, matched_genres, excluded_genres):
     return reply
 
 
+@app.route("/", methods=["GET"])
+def serve_index():
+    """Serve the frontend entrypoint for single-service deployments."""
+    return send_from_directory(ROOT_DIR, "index.html")
+
+
+@app.route("/<path:asset_path>", methods=["GET"])
+def serve_frontend_assets(asset_path):
+    """Serve frontend static assets and fallback to index for SPA navigation."""
+    file_path = ROOT_DIR / asset_path
+    if file_path.is_file():
+        return send_from_directory(ROOT_DIR, asset_path)
+    return send_from_directory(ROOT_DIR, "index.html")
+
+
 # ---- Entry Point -------------------------------------------------------------
 if __name__ == "__main__":
-    port = int(os.environ.get("ML_PORT", 5001))
+    port = int(os.environ.get("PORT", os.environ.get("ML_PORT", 5001)))
     print("=" * 60)
     print("  CineNext ML Recommendation Engine v2 (Enhanced)")
     print(f"  Running on http://localhost:{port}")

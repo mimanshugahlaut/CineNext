@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: cinenext
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT ml_server.server:app
+    healthCheckPath: /health
+    envVars:
+      - key: TMDB_API_TOKEN
+        sync: false
+      - key: OMDB_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: GOOGLE_REDIRECT_TO
+        sync: false
+      - key: ML_PORT
+        value: "5001"
