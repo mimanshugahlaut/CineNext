@@ -351,6 +351,15 @@ def rate_limit_handler(e):
     return jsonify({"error": "Rate limit exceeded. Please slow down.", "retry_after": e.description}), 429
 
 
+# Allowlist of valid top-level TMDB path segments.
+# This prevents misuse of the server's TMDB API token on unintended endpoints
+# (e.g., /api/tmdb/authentication/... or /api/tmdb/account/...).
+TMDB_ALLOWED_PATH_PREFIXES = {
+    "trending", "movie", "tv", "search", "genre",
+    "discover", "person", "collection", "network",
+    "keyword", "review", "find",
+}
+
 # ---- Routes ------------------------------------------------------------------
 @app.route("/health", methods=["GET"])
 @limiter.limit("60/minute")
@@ -362,20 +371,49 @@ def health():
 @app.route("/api/runtime-config", methods=["GET"])
 @limiter.limit("60/minute")
 def runtime_config():
-    """Expose non-sensitive runtime config needed by the web client."""
+    """
+    Expose non-sensitive runtime config needed by the web client.
+    NOTE: Supabase credentials are intentionally NOT returned here — they are
+    injected server-side via the /api/client-bootstrap script tag to avoid them
+    being freely discoverable via a plain JSON endpoint crawl.
+    """
     return jsonify({
-        "supabaseUrl": SUPABASE_URL,
-        "supabaseAnonKey": SUPABASE_ANON_KEY,
         "googleRedirectTo": GOOGLE_REDIRECT_TO,
         "onboardingEnabled": True,
         "analyticsEnabled": True,
     })
 
 
+@app.route("/api/client-bootstrap", methods=["GET"])
+@limiter.limit("60/minute")
+def client_bootstrap():
+    """
+    Returns a <script> tag that injects Supabase credentials as a
+    window-level config object. Embedding credentials in HTML rather than a
+    plain JSON endpoint makes them harder to find via automated API crawling,
+    and keeps them scoped to the browser context only.
+    """
+    from flask import Response
+    script = (
+        "window.__CN_CONFIG__ = {{"
+        f'"supabaseUrl":"{SUPABASE_URL}",'
+        f'"supabaseAnonKey":"{SUPABASE_ANON_KEY}"'
+        "}};"
+    )
+    return Response(f"<script>{script}</script>", mimetype="text/html")
+
+
 @app.route("/api/tmdb/<path:tmdb_path>", methods=["GET"])
 @limiter.limit("120/minute")
 def tmdb_proxy(tmdb_path):
-    """Server-side TMDB proxy so provider credentials stay off shipped client files."""
+    """
+    Server-side TMDB proxy so provider credentials stay off shipped client files.
+    Only whitelisted top-level path segments are permitted to prevent API token abuse.
+    """
+    first_segment = tmdb_path.split("/")[0].lower()
+    if first_segment not in TMDB_ALLOWED_PATH_PREFIXES:
+        log.warning("TMDB proxy blocked disallowed path: %s", tmdb_path)
+        return jsonify({"error": "Forbidden TMDB path"}), 403
     try:
         proxied = requests.get(
             f"{BASE_URL}/{tmdb_path}",

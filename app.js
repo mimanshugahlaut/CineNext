@@ -47,10 +47,39 @@ async function loadRuntimeConfig() {
   try {
     const mlBase = localStorage.getItem('mlBase') || DEFAULT_ML_BASE;
     appConfig.mlBase = mlBase;
+
+    // Step 1: Load non-sensitive runtime config (redirect URLs, feature flags)
     const res = await fetch(`${mlBase}/api/runtime-config`);
-    if(res.ok) {
-        const data = await res.json();
-        appConfig = { ...appConfig, ...data };
+    if (res.ok) {
+      const data = await res.json();
+      appConfig = { ...appConfig, ...data };
+    }
+
+    // Step 2: Load Supabase credentials.
+    // Prefer window.__CN_CONFIG__ which is injected by the server as an inline
+    // <script> block — keeping the keys out of plain JSON API responses.
+    // Falls back to a direct bootstrap fetch for local development.
+    const injected = window.__CN_CONFIG__;
+    if (injected && injected.supabaseUrl && injected.supabaseAnonKey) {
+      appConfig.supabaseUrl = injected.supabaseUrl;
+      appConfig.supabaseAnonKey = injected.supabaseAnonKey;
+    } else {
+      // Local dev fallback: fetch the bootstrap endpoint
+      try {
+        const bootstrapRes = await fetch(`${mlBase}/api/client-bootstrap`);
+        if (bootstrapRes.ok) {
+          // The endpoint returns a <script> block; execute it to populate window.__CN_CONFIG__
+          const scriptText = await bootstrapRes.text();
+          const match = scriptText.match(/window\.__CN_CONFIG__\s*=\s*(\{[\s\S]*?\});/);
+          if (match) {
+            const cfg = JSON.parse(match[1]);
+            appConfig.supabaseUrl = cfg.supabaseUrl || '';
+            appConfig.supabaseAnonKey = cfg.supabaseAnonKey || '';
+          }
+        }
+      } catch (bootstrapErr) {
+        console.warn('client-bootstrap fetch failed:', bootstrapErr);
+      }
     }
   } catch (err) {
     console.warn('loadRuntimeConfig failed:', err);
