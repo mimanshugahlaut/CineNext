@@ -190,6 +190,19 @@ async function checkMlServer() {
   }
 }
 
+/**
+ * Silently pings the ML backend the moment a user enters the app.
+ * This triggers Render to start waking the server up in the background
+ * long before the user actually needs ML features, reducing perceived wait time.
+ */
+function silentMlPrewarm() {
+  const mlBase = getMlBase();
+  if (!mlBase) return;
+  fetch(`${mlBase}/health`, { signal: AbortSignal.timeout(90000) })
+    .then(r => { if (r.ok) console.log('[CineNext] ML server is warm ✓'); })
+    .catch(() => console.log('[CineNext] ML server is warming up in background...'));
+}
+
 function trackEvent(name, data) {
   console.log(`[Tracking] ${name}`, data);
 }
@@ -635,6 +648,10 @@ async function enterApp() {
   setPrimaryView('home');
   updateUserProfile();
 
+  // Pre-warm the Render ML server immediately so it's ready
+  // by the time the user navigates to recommendations or Smart Match.
+  silentMlPrewarm();
+
   // Ensure main content sections are visible
   dom.trendingSection.classList.remove('hidden');
   dom.topRatedSection.classList.remove('hidden');
@@ -859,6 +876,36 @@ async function loadPersonalizedRecommendations() {
   renderSkeletons(dom.recommendedGrid);
   dom.recommendedSection.classList.remove('hidden');
 
+  // Show a warm-up aware loading card while we wait for the ML server
+  let warmupSeconds = 60;
+  let warmupInterval = null;
+  const showWarmupCard = () => {
+    dom.recommendedGrid.innerHTML = `
+      <div class="state-card warmup-card" id="ml-warmup-card">
+        <div class="warmup-icon">🤖</div>
+        <h3>AI is warming up</h3>
+        <p>Our recommendation engine is starting up. This takes about <strong id="warmup-countdown">${warmupSeconds}s</strong> on first load.</p>
+        <div class="warmup-bar-track"><div class="warmup-bar-fill" id="warmup-bar"></div></div>
+        <p class="warmup-sub">Browse movies below while you wait!</p>
+      </div>
+    `;
+    warmupInterval = setInterval(() => {
+      warmupSeconds = Math.max(0, warmupSeconds - 1);
+      const el = document.getElementById('warmup-countdown');
+      const bar = document.getElementById('warmup-bar');
+      if (el) el.textContent = `${warmupSeconds}s`;
+      if (bar) bar.style.width = `${((60 - warmupSeconds) / 60) * 100}%`;
+      if (warmupSeconds <= 0) clearInterval(warmupInterval);
+    }, 1000);
+  };
+
+  // Only show warmup card if no cached results exist (first ML request)
+  if (!localStorage.getItem(cacheKey)) {
+    showWarmupCard();
+  } else {
+    renderSkeletons(dom.recommendedGrid);
+  }
+
   try {
     // Try personalized recommendation first
     const recommendationFilters = currentTab === 'bollywood'
@@ -873,6 +920,8 @@ async function loadPersonalizedRecommendations() {
         result = await api.mlRecommend(mediaType, matchingWatched[0].id);
       }
     }
+    
+    clearInterval(warmupInterval);
     
     if (result && result.recommendations && result.recommendations.length > 0) {
       // Convert ML output to app format
@@ -899,6 +948,7 @@ async function loadPersonalizedRecommendations() {
       dom.recommendedSection.classList.remove('hidden');
     }
   } catch (err) {
+    clearInterval(warmupInterval);
     console.error('Error loading personalized recommendations:', err);
     renderStateCard(dom.recommendedGrid, {
       variant: 'error',
