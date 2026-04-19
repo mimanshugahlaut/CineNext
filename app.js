@@ -8,6 +8,17 @@ function getDefaultMlBase() {
 }
 
 const DEFAULT_ML_BASE = getDefaultMlBase();
+
+function getProxyBase() {
+  // Always use local origin for Vercel Serverless proxy requests.
+  // Locally, this points to the Python Flask server at port 5001.
+  const host = window.location.hostname;
+  if (host === '127.0.0.1' || host === 'localhost') {
+    return getMlBase(); // Fallback to Flask proxy in local dev
+  }
+  return ''; // Hit the Vercel Serverless functions directly in prod
+}
+
 const IMG = 'https://image.tmdb.org/t/p/w500';
 const IMG_ORIGINAL = 'https://image.tmdb.org/t/p/original';
 const PROFILE_IMG = 'https://image.tmdb.org/t/p/w185';
@@ -1161,10 +1172,10 @@ function handleGuestLogin() {
 // API CLIENT
 // ═══════════════════════════════════════════════════════════════
 async function tmdb(endpoint, params = {}) {
-  const url = new URL(`${getMlBase()}/api/tmdb${endpoint}`);
+  const url = new URL(`${getProxyBase()}/api/tmdb${endpoint}`);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   try {
-    const res = await fetch(url);
+    const res = await fetch(url.toString());
     if (!res.ok) {
       const errText = await res.text();
       return { isError: true, message: `HTTP ${res.status}: ${errText}` };
@@ -1177,7 +1188,7 @@ async function tmdb(endpoint, params = {}) {
 }
 
 async function omdbByImdbId(imdbId) {
-  const url = new URL(`${getMlBase()}/api/omdb`);
+  const url = new URL(`${getProxyBase()}/api/omdb`);
   url.searchParams.set('i', imdbId);
   try {
     const res = await fetch(url);
