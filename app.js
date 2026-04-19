@@ -8,17 +8,6 @@ function getDefaultMlBase() {
 }
 
 const DEFAULT_ML_BASE = getDefaultMlBase();
-
-function getProxyBase() {
-  // Always use local origin for Vercel Serverless proxy requests.
-  // Locally, this points to the Python Flask server at port 5001.
-  const host = window.location.hostname;
-  if (host === '127.0.0.1' || host === 'localhost') {
-    return getMlBase(); // Fallback to Flask proxy in local dev
-  }
-  return ''; // Hit the Vercel Serverless functions directly in prod
-}
-
 const IMG = 'https://image.tmdb.org/t/p/w500';
 const IMG_ORIGINAL = 'https://image.tmdb.org/t/p/original';
 const PROFILE_IMG = 'https://image.tmdb.org/t/p/w185';
@@ -56,30 +45,26 @@ const appViewState = {
 
 async function loadRuntimeConfig() {
   try {
-    const mlBase = localStorage.getItem('mlBase') || DEFAULT_ML_BASE;
-    appConfig.mlBase = mlBase;
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-    // Step 1: Load non-sensitive runtime config (redirect URLs, feature flags)
-    const res = await fetch(`${mlBase}/api/runtime-config`);
-    if (res.ok) {
-      const data = await res.json();
-      appConfig = { ...appConfig, ...data };
-    }
+    if (isLocal) {
+      // ── Local Development ─────────────────────────────────────────
+      const mlBase = localStorage.getItem('mlBase') || DEFAULT_ML_BASE;
+      appConfig.mlBase = mlBase;
 
-    // Step 2: Load Supabase credentials.
-    // Prefer window.__CN_CONFIG__ which is injected by the server as an inline
-    // <script> block — keeping the keys out of plain JSON API responses.
-    // Falls back to a direct bootstrap fetch for local development.
-    const injected = window.__CN_CONFIG__;
-    if (injected && injected.supabaseUrl && injected.supabaseAnonKey) {
-      appConfig.supabaseUrl = injected.supabaseUrl;
-      appConfig.supabaseAnonKey = injected.supabaseAnonKey;
-    } else {
-      // Local dev fallback: fetch the bootstrap endpoint
+      // Fetch non-sensitive config from local Flask server
+      try {
+        const res = await fetch(`${mlBase}/api/runtime-config`);
+        if (res.ok) {
+          const data = await res.json();
+          appConfig = { ...appConfig, ...data };
+        }
+      } catch (_) { /* ok if offline */ }
+
+      // Fetch Supabase credentials from bootstrap endpoint
       try {
         const bootstrapRes = await fetch(`${mlBase}/api/client-bootstrap`);
         if (bootstrapRes.ok) {
-          // The endpoint returns a <script> block; execute it to populate window.__CN_CONFIG__
           const scriptText = await bootstrapRes.text();
           const match = scriptText.match(/window\.__CN_CONFIG__\s*=\s*(\{[\s\S]*?\});/);
           if (match) {
@@ -90,6 +75,18 @@ async function loadRuntimeConfig() {
         }
       } catch (bootstrapErr) {
         console.warn('client-bootstrap fetch failed:', bootstrapErr);
+      }
+    } else {
+      // ── Production (Vercel) ────────────────────────────────────────
+      // /api/config is a Vercel serverless function that returns all runtime
+      // config from Vercel encrypted env vars (Render URL + Supabase keys).
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.mlBase) appConfig.mlBase = data.mlBase;
+        if (data.supabaseUrl) appConfig.supabaseUrl = data.supabaseUrl;
+        if (data.supabaseAnonKey) appConfig.supabaseAnonKey = data.supabaseAnonKey;
+        if (data.googleRedirectTo) appConfig.googleRedirectTo = data.googleRedirectTo;
       }
     }
   } catch (err) {
@@ -119,7 +116,7 @@ function setPrimaryView(viewId) {
 
 function setOverlayState(overlayId) {
   appViewState.overlay = overlayId;
-  
+
   if (overlayId === 'modal') {
     dom.modalBackdrop?.classList.add('show');
     dom.modal?.classList.add('show');
@@ -128,7 +125,7 @@ function setOverlayState(overlayId) {
     dom.modalBackdrop?.classList.remove('show');
     dom.modal?.classList.remove('show');
   }
-  
+
   if (overlayId === 'drawer') {
     dom.drawerOverlay?.classList.add('show');
     dom.watchlistDrawer?.classList.add('show');
@@ -137,21 +134,21 @@ function setOverlayState(overlayId) {
     dom.drawerOverlay?.classList.remove('show');
     dom.watchlistDrawer?.classList.remove('show');
   }
-  
+
   if (overlayId === 'smart-match') {
     dom.conciergeOverlay?.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
   } else {
     dom.conciergeOverlay?.classList.add('hidden');
   }
-  
+
   if (overlayId === 'onboarding') {
     dom.onboardingOverlay?.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
   } else {
     dom.onboardingOverlay?.classList.add('hidden');
   }
-  
+
   if (!overlayId) {
     document.body.style.overflow = '';
   }
@@ -185,7 +182,7 @@ function showToast(msg) {
   const toast = document.createElement('div');
   toast.className = 'toast show';
   toast.textContent = msg;
-  if(dom.toastStack) dom.toastStack.appendChild(toast);
+  if (dom.toastStack) dom.toastStack.appendChild(toast);
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
@@ -195,7 +192,7 @@ function showToast(msg) {
 async function checkMlServer() {
   try {
     const res = await fetch(`${appConfig.mlBase}/health`);
-    if(res.ok) console.log('ML server connected');
+    if (res.ok) console.log('ML server connected');
   } catch (err) {
     console.warn('ML server unavailable');
   }
@@ -234,7 +231,7 @@ function normalizeMediaItem(item, forceType) {
 }
 
 function renderStateCard(container, data) {
-  if(!container) return;
+  if (!container) return;
   container.innerHTML = `
     <div class="state-card ${data.variant || ''}">
       <h3>${data.title}</h3>
@@ -571,7 +568,7 @@ async function handleSignup(e) {
 // ── Login (Supabase) ──────────────────────────────────────────
 async function handleLogin(e) {
   e.preventDefault();
-  
+
   if (!supabaseClient) {
     showAuthMessage('Connecting to authentication server... please wait a moment.');
     return;
@@ -616,9 +613,9 @@ async function handleLogin(e) {
 // ── OTP & Google Sign-In (Removed) ────────────────────────────
 // OTP verification is not used in this build.
 // Signup is now instant (email confirmation disabled in Supabase).
-function showOtpScreen() {}
-function hideOtpScreen() {}
-function initOtpEvents() {}
+function showOtpScreen() { }
+function hideOtpScreen() { }
+function initOtpEvents() { }
 async function handleGoogleSignIn() {
   if (!supabaseClient) {
     showAuthMessage('Authentication is not ready yet. Try again in a moment.');
@@ -742,7 +739,7 @@ async function migrateLocalData(uid, email) {
     if (localWl.length > 0) {
       const payloads = localWl.map(item => ({
         user_id: uid, tmdb_id: item.id, media_type: item.media_type || 'movie',
-        title: item.title || item.name, poster_path: item.poster_path, 
+        title: item.title || item.name, poster_path: item.poster_path,
         vote_average: item.vote_average || 0, release_date: item.release_date || null
       }));
       await supabaseClient.from('watchlist').insert(payloads);
@@ -779,7 +776,7 @@ async function migrateLocalData(uid, email) {
             user_name: r.userName || 'User',
             user_email: r.userEmail,
             tmdb_id: parseInt(itemId),
-            media_type: 'movie', 
+            media_type: 'movie',
             rating: r.rating,
             review_text: r.text || r.review
           });
@@ -800,7 +797,7 @@ async function migrateLocalData(uid, email) {
 async function loadUserDataFromDB() {
   if (!currentUser) return;
   const uid = currentUser.id;
-  
+
   await migrateLocalData(uid, currentUser.email);
 
   // Load watchlist
@@ -870,10 +867,10 @@ async function loadPersonalizedRecommendations() {
 
   // Determine media type for this tab
   const mediaType = currentTab === 'tv' ? 'tv' : 'movie';
-  
+
   // Get watched items of matching type
   const matchingWatched = watchedList.filter(w => (w.media_type || 'movie') === mediaType);
-  
+
   if (matchingWatched.length === 0) {
     dom.recommendedSection.classList.remove('hidden');
     renderStateCard(dom.recommendedGrid, {
@@ -923,7 +920,7 @@ async function loadPersonalizedRecommendations() {
       ? { with_original_language: 'hi', region: 'IN', with_origin_country: 'IN' }
       : {};
     let result = await api.mlPersonalized(mediaType, matchingWatched, recommendationFilters);
-    
+
     // If personalized unavailable, fallback to content-based on the first watched item
     if (!result || !result.recommendations || result.recommendations.length === 0) {
       console.debug('Personalized endpoint unavailable or returned no results, using fallback...');
@@ -931,9 +928,9 @@ async function loadPersonalizedRecommendations() {
         result = await api.mlRecommend(mediaType, matchingWatched[0].id);
       }
     }
-    
+
     clearInterval(warmupInterval);
-    
+
     if (result && result.recommendations && result.recommendations.length > 0) {
       // Convert ML output to app format
       const items = result.recommendations.map(rec => ({
@@ -1060,9 +1057,9 @@ function renderProfileGrid(selector, items, emptyText) {
     return `
       <div class="profile-grid-item" data-id="${item.id}" data-type="${item.media_type || 'movie'}" title="${item.title || ''}">
         ${poster
-          ? `<img src="${poster}" alt="${item.title || ''}" loading="lazy" />`
-          : `<div class="no-poster">🎬</div>`
-        }
+        ? `<img src="${poster}" alt="${item.title || ''}" loading="lazy" />`
+        : `<div class="no-poster">🎬</div>`
+      }
       </div>
     `;
   }).join('');
@@ -1172,10 +1169,10 @@ function handleGuestLogin() {
 // API CLIENT
 // ═══════════════════════════════════════════════════════════════
 async function tmdb(endpoint, params = {}) {
-  const url = new URL(`${getProxyBase()}/api/tmdb${endpoint}`);
+  const url = new URL(`${getMlBase()}/api/tmdb${endpoint}`);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   try {
-    const res = await fetch(url.toString());
+    const res = await fetch(url);
     if (!res.ok) {
       const errText = await res.text();
       return { isError: true, message: `HTTP ${res.status}: ${errText}` };
@@ -1188,7 +1185,7 @@ async function tmdb(endpoint, params = {}) {
 }
 
 async function omdbByImdbId(imdbId) {
-  const url = new URL(`${getProxyBase()}/api/omdb`);
+  const url = new URL(`${getMlBase()}/api/omdb`);
   url.searchParams.set('i', imdbId);
   try {
     const res = await fetch(url);
@@ -1240,12 +1237,12 @@ const api = {
     ...params,
     sort_by: 'popularity.desc',
   }),
-  
+
   // ML-based recommendations
   mlRecommend: (type, id) => fetch(`${getMlBase()}/api/recommend?type=${type}&id=${id}&n=8`)
     .then(r => r.json())
     .catch(e => { console.warn('ML recommend failed:', e); return null; }),
-  
+
   mlPersonalized: (type, watchHistory, extraParams = {}) => {
     const params = new URLSearchParams({
       type,
@@ -1259,7 +1256,7 @@ const api = {
       .then(r => r.json())
       .catch(e => { console.warn('ML personalized failed:', e); return null; });
   },
-  
+
   mlMood: (query, type = 'movie') => fetch(`${getMlBase()}/api/mood?query=${encodeURIComponent(query)}&type=${type}&n=12`)
     .then(r => r.json())
     .catch(e => { console.warn('ML mood failed:', e); return null; }),
@@ -1328,9 +1325,9 @@ function renderCard(item, forceType) {
   card.innerHTML = `
     <div class="card-poster-wrapper">
       ${poster
-        ? `<img class="card-poster" src="${poster}" alt="${title}" loading="lazy" />`
-        : `<div class="no-poster">🎬</div>`
-      }
+      ? `<img class="card-poster" src="${poster}" alt="${title}" loading="lazy" />`
+      : `<div class="no-poster">🎬</div>`
+    }
       <span class="card-type-badge ${type === 'tv' ? 'tv' : ''}">${type === 'tv' ? 'TV' : 'MOVIE'}</span>
       <button class="card-watchlist-btn ${inWatchlist ? 'in-watchlist' : ''}" data-id="${normalized.id}" title="Toggle Watchlist">
         ${inWatchlist ? '❤️' : '🤍'}
@@ -1731,14 +1728,14 @@ async function openModal(id, type, options = {}) {
   const backdrop = getBackdrop(data);
   const poster = getPoster(data);
   dom.modalBackdropImg.src = backdrop || poster || '';
-  
+
   document.getElementById('modal')?.classList.remove('dynamic-themed');
   document.documentElement.style.removeProperty('--dynamic-accent');
   document.documentElement.style.removeProperty('--dynamic-accent-rgb');
   dom.modalPoster.crossOrigin = 'anonymous';
   dom.modalPoster.onload = () => extractDominantColor(dom.modalPoster);
   dom.modalPoster.src = poster || '';
-  
+
   dom.modalTitle.textContent = title;
   dom.modalOverview.textContent = data.overview || 'No overview available.';
 
@@ -1787,9 +1784,9 @@ async function openModal(id, type, options = {}) {
     dom.castScroll.innerHTML = cast.map((c) => `
       <div class="cast-card" data-person-id="${c.id}" data-person-name="${c.name}" style="cursor:pointer;">
         ${c.profile_path
-          ? `<img class="cast-img" src="${PROFILE_IMG}${c.profile_path}" alt="${c.name}" loading="lazy" />`
-          : `<div class="cast-img" style="display:flex;align-items:center;justify-content:center;background:var(--bg-card);font-size:1.5rem;">👤</div>`
-        }
+        ? `<img class="cast-img" src="${PROFILE_IMG}${c.profile_path}" alt="${c.name}" loading="lazy" />`
+        : `<div class="cast-img" style="display:flex;align-items:center;justify-content:center;background:var(--bg-card);font-size:1.5rem;">👤</div>`
+      }
         <div class="cast-name">${c.name}</div>
         <div class="cast-role">${c.character || ''}</div>
       </div>
@@ -1812,9 +1809,9 @@ async function openModal(id, type, options = {}) {
     $('#director-scroll').innerHTML = directors.map((d) => `
       <div class="cast-card" data-person-id="${d.id}" data-person-name="${d.name}" style="cursor:pointer;">
         ${d.profile_path
-          ? `<img class="cast-img" src="${PROFILE_IMG}${d.profile_path}" alt="${d.name}" loading="lazy" />`
-          : `<div class="cast-img" style="display:flex;align-items:center;justify-content:center;background:var(--bg-card);font-size:1.5rem;">🎬</div>`
-        }
+        ? `<img class="cast-img" src="${PROFILE_IMG}${d.profile_path}" alt="${d.name}" loading="lazy" />`
+        : `<div class="cast-img" style="display:flex;align-items:center;justify-content:center;background:var(--bg-card);font-size:1.5rem;">🎬</div>`
+      }
         <div class="cast-name">${d.name}</div>
         <div class="cast-role">Director</div>
       </div>
@@ -1840,9 +1837,9 @@ async function openModal(id, type, options = {}) {
       return `
         <div class="season-card" data-season="${s.season_number}">
           ${s.poster_path
-            ? `<img class="season-poster" src="${IMG}${s.poster_path}" alt="${s.name}" loading="lazy" />`
-            : `<div class="season-poster-placeholder">📂</div>`
-          }
+          ? `<img class="season-poster" src="${IMG}${s.poster_path}" alt="${s.name}" loading="lazy" />`
+          : `<div class="season-poster-placeholder">📂</div>`
+        }
           <div class="season-info">
             <div class="season-name">${s.name || `Season ${s.season_number}`}</div>
             <div class="season-meta">${s.episode_count || 0} Episodes${airYear ? ` • ${airYear}` : ''}</div>
@@ -1857,8 +1854,8 @@ async function openModal(id, type, options = {}) {
   // Try ML server first; fall back to TMDB /similar if not running
   dom.similarSection.classList.remove('hidden');
   const mlSectionTitle = dom.similarSection.querySelector('h3') ||
-                         dom.similarSection.querySelector('.section-title') ||
-                         dom.similarSection.firstElementChild;
+    dom.similarSection.querySelector('.section-title') ||
+    dom.similarSection.firstElementChild;
 
   // Show loading skeletons while fetching
   renderSkeletons(dom.similarGrid, 6);
@@ -1873,11 +1870,11 @@ async function openModal(id, type, options = {}) {
   } else {
     recSource = 'You might also like';
     similarItems = (data.similar?.results || []).slice(0, 8).map(s => ({
-      id:           s.id,
-      title:        s.title || s.name || '',
-      poster_url:   getPoster(s),
+      id: s.id,
+      title: s.title || s.name || '',
+      poster_url: getPoster(s),
       vote_average: s.vote_average || 0,
-      similarity:   null,
+      similarity: null,
     }));
   }
 
@@ -1886,7 +1883,7 @@ async function openModal(id, type, options = {}) {
   if (similarItems.length) {
     dom.similarGrid.innerHTML = similarItems.map((s) => {
       const sPoster = s.poster_url || (s.poster_path ? `${IMG}${s.poster_path}` : '');
-      const sTitle  = s.title || '';
+      const sTitle = s.title || '';
       const sRating = (s.vote_average || 0).toFixed(1);
       const scoreHtml = s.similarity != null
         ? `<div class="similar-card-score" title="ML similarity score">🎯 ${(s.similarity * 100).toFixed(0)}%</div>`
@@ -1894,9 +1891,9 @@ async function openModal(id, type, options = {}) {
       return `
         <div class="similar-card" data-id="${s.id}" data-type="${type}">
           ${sPoster
-            ? `<img src="${sPoster}" alt="${sTitle}" loading="lazy" />`
-            : `<div class="no-poster" style="font-size:2rem;">🎬</div>`
-          }
+          ? `<img src="${sPoster}" alt="${sTitle}" loading="lazy" />`
+          : `<div class="no-poster" style="font-size:2rem;">🎬</div>`
+        }
           <div class="similar-card-info">
             <div class="similar-card-title">${sTitle}</div>
             <div class="similar-card-rating">⭐ ${sRating}${scoreHtml}</div>
@@ -1957,9 +1954,9 @@ async function loadFilmography(personId, personName) {
     return `
       <div class="similar-card" data-id="${s.id}" data-type="${sType}">
         ${sPoster
-          ? `<img src="${sPoster}" alt="${sTitle}" loading="lazy" />`
-          : `<div class="no-poster" style="font-size:2rem;">🎬</div>`
-        }
+        ? `<img src="${sPoster}" alt="${sTitle}" loading="lazy" />`
+        : `<div class="no-poster" style="font-size:2rem;">🎬</div>`
+      }
         <div class="similar-card-info">
           <div class="similar-card-title">${sTitle}</div>
           <div class="similar-card-rating">⭐ ${sRating}</div>
@@ -2236,7 +2233,7 @@ function updateStarPicker(rating) {
 async function renderReviewsList(itemId) {
   const container = $('#reviews-list');
   container.innerHTML = '<div class="loading-center"><div class="spinner"></div></div>';
-  
+
   const reviews = await getReviews(itemId);
 
   if (reviews.length === 0) {
@@ -2282,13 +2279,13 @@ async function renderReviewsList(itemId) {
 // ── Multi-source ratings bar ──────────────────────────────────
 // ── Watch Providers ───────────────────────────────────────────
 const PROVIDER_URLS = {
-  8:   (t) => `https://www.netflix.com/search?q=${t}`,
-  9:   (t) => `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${t}`,
+  8: (t) => `https://www.netflix.com/search?q=${t}`,
+  9: (t) => `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${t}`,
   119: (t) => `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${t}`,
   337: (t) => `https://www.disneyplus.com/search/${t}`,
-  2:   (t) => `https://tv.apple.com/search?term=${t}`,
+  2: (t) => `https://tv.apple.com/search?term=${t}`,
   350: (t) => `https://tv.apple.com/search?term=${t}`,
-  3:   (t) => `https://play.google.com/store/search?q=${t}&c=movies`,
+  3: (t) => `https://play.google.com/store/search?q=${t}&c=movies`,
   192: (t) => `https://www.youtube.com/results?search_query=${t}`,
   122: (t) => `https://www.hotstar.com/in/search/phrase/${t}`,
   220: (t) => `https://www.jiocinema.com/search/${t}`,
@@ -2297,9 +2294,9 @@ const PROVIDER_URLS = {
   531: (t) => `https://www.paramountplus.com/search/?q=${t}`,
   384: (t) => `https://www.max.com/search?q=${t}`,
   387: (t) => `https://www.peacocktv.com/search?q=${t}`,
-  15:  (t) => `https://www.hulu.com/search?q=${t}`,
+  15: (t) => `https://www.hulu.com/search?q=${t}`,
   283: (t) => `https://www.crunchyroll.com/search?q=${t}`,
-  1899:(t) => `https://www.max.com/search?q=${t}`,
+  1899: (t) => `https://www.max.com/search?q=${t}`,
 };
 
 function getProviderUrl(providerId, title) {
@@ -2328,14 +2325,14 @@ async function loadWatchProviders(id, type, title) {
         <div class="watch-providers-group-label">${label}</div>
         <div class="watch-providers-list">
           ${providers.map(p => {
-            const url = getProviderUrl(p.provider_id, title);
-            return `
+      const url = getProviderUrl(p.provider_id, title);
+      return `
               <a class="watch-provider" href="${url}" target="_blank" rel="noopener" title="Watch on ${p.provider_name}">
                 <img class="watch-provider-logo" src="https://image.tmdb.org/t/p/w92${p.logo_path}" alt="${p.provider_name}" />
                 <span class="watch-provider-name">${p.provider_name}</span>
               </a>
             `;
-          }).join('')}
+    }).join('')}
         </div>
       </div>
     `;
@@ -2802,7 +2799,7 @@ const SMART_GENRES = {
   // Comedy
   'comedy': 35, 'funny': 35, 'laugh': 35, 'hilarious': 35, 'sitcom': 35,
   // Horror & Thriller
-  'horror': 27, 'scary': 27, 'spooky': 27, 'creepy': 27, 
+  'horror': 27, 'scary': 27, 'spooky': 27, 'creepy': 27,
   'thriller': 53, 'suspense': 53, 'mystery': 9648,
   // Sci-Fi & Fantasy
   'sci-fi': 878, 'scifi': 878, 'science fiction': 878, 'space': 878, 'aliens': 878,
@@ -2852,7 +2849,7 @@ function parseSmartQuery(query) {
     sort_by: 'popularity.desc'
   };
   const tags = [];
-  
+
   // 1. Determine Type
   let type = 'movie'; // default
   if (q.includes('tv') || q.includes('show') || q.includes('series') || q.includes('sitcom')) {
@@ -2901,7 +2898,7 @@ function parseSmartQuery(query) {
       if (r.region) params['region'] = r.region;
       if (r.country) params['with_origin_country'] = r.country;
       if (r.forceType) type = r.forceType;
-      
+
       const label = key.charAt(0).toUpperCase() + key.slice(1);
       if (!tags.includes(label)) tags.push(label);
     }
@@ -2929,7 +2926,7 @@ async function handleSmartMatchSubmit() {
 
   // Fetch Discover API
   let data = await api.smartDiscover(type, params);
-  
+
   // Fallback 1: Loosen decades restrictive dates if 0 results
   if (data && data.results && data.results.length === 0) {
     if (params['primary_release_date.gte'] || params['first_air_date.gte']) {
@@ -2948,7 +2945,7 @@ async function handleSmartMatchSubmit() {
     ['movie', 'film', 'tv', 'show', 'series'].forEach(w => strippedQuery = strippedQuery.replace(new RegExp(`\\b${w}s?\\b`, 'gi'), ''));
     Object.keys(SMART_GENRES).forEach(w => strippedQuery = strippedQuery.replace(new RegExp(`\\b${w}\\b`, 'gi'), ''));
     strippedQuery = strippedQuery.trim();
-    
+
     // If there are words left, search them (e.g., "spooky horror movies" -> "")
     if (strippedQuery.length > 2) {
       data = await api.searchMulti(strippedQuery);
@@ -2990,7 +2987,7 @@ function showDiscoverSection(options = {}) {
   dom.genreSection.classList.add('hidden');
   dom.recommendedSection.classList.add('hidden');
   dom.discoverSection.classList.remove('hidden');
-  
+
   // Update navs
   dom.contentTabs.querySelectorAll('.content-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.tab === 'discover');
@@ -3071,12 +3068,12 @@ function handleDiscoverSearch(resetPage = true) {
 
   return api.discoverContent(discoverState.type, params).then(data => {
     if (resetPage) dom.discoverGrid.innerHTML = '';
-    
+
     if (data && !data.isError && data.results && data.results.length > 0) {
       discoverState.results = resetPage ? data.results : [...discoverState.results, ...data.results];
       renderGrid(dom.discoverGrid, data.results, discoverState.type, !resetPage);
       dom.discoverResultsMeta.textContent = `${discoverState.results.length} titles loaded for ${discoverState.type === 'tv' ? 'TV shows' : 'movies'}.`;
-      
+
       if (data.page < data.total_pages) {
         dom.discoverLoadMore.classList.remove('hidden');
       } else {
@@ -3171,7 +3168,7 @@ function bindEvents() {
         showDiscoverSection();
         return;
       }
-      
+
       dom.contentTabs.querySelectorAll('.content-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       setDesktopDiscoverActive(false);
@@ -3185,14 +3182,14 @@ function bindEvents() {
         // Try mapping the genre to the new selected tab's available genres
         const list = currentTab === 'tv' ? genres.tv : genres.movie;
         let match = list.find(g => g.name === activeGenreName);
-        
+
         // Handle names that don't match exactly (e.g. "War" -> "War & Politics", "Action" -> "Action & Adventure")
         if (!match) {
           if (activeGenreName.includes('War')) match = list.find(g => g.name.includes('War'));
           else if (activeGenreName.includes('Action') || activeGenreName.includes('Adventure')) match = list.find(g => g.name.includes('Action'));
           else if (activeGenreName.includes('Sci-Fi') || activeGenreName.includes('Science')) match = list.find(g => g.name.includes('Sci-Fi') || g.name.includes('Science'));
         }
-        
+
         if (match) {
           activeGenreId = match.id;
           activeGenreName = match.name;
@@ -3209,7 +3206,7 @@ function bindEvents() {
         loadPersonalizedRecommendations();
         syncHistoryState('push');
       }
-      
+
       renderGenreMenu();
     });
   });
@@ -3369,7 +3366,7 @@ async function init() {
         // Check if token is expired
         const payload = JSON.parse(atob(parsed.access_token.split('.')[1]));
         const now = Math.floor(Date.now() / 1000);
-        
+
         if (payload.exp && payload.exp > now) {
           // Token is still valid — restore the session manually
           currentUser = parsed.user;
@@ -3455,34 +3452,34 @@ function extractDominantColor(imgEl) {
   if (!dom.colorExtractCanvas || !imgEl.complete || imgEl.naturalWidth === 0) return;
   const canvas = dom.colorExtractCanvas;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  
+
   try {
     ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    
+
     let r = 0, g = 0, b = 0, count = 0;
-    
+
     for (let i = 0; i < imageData.length; i += 64) {
-      const pr = imageData[i], pg = imageData[i+1], pb = imageData[i+2];
+      const pr = imageData[i], pg = imageData[i + 1], pb = imageData[i + 2];
       const darkness = (pr + pg + pb) / 3;
-      if (darkness > 30 && darkness < 225) { 
+      if (darkness > 30 && darkness < 225) {
         r += pr; g += pg; b += pb;
         count++;
       }
     }
-    
+
     if (count > 0) {
       r = Math.floor(r / count);
       g = Math.floor(g / count);
       b = Math.floor(b / count);
-      
+
       document.documentElement.style.setProperty('--dynamic-accent', `rgb(${r}, ${g}, ${b})`);
       document.documentElement.style.setProperty('--dynamic-accent-rgb', `${r}, ${g}, ${b}`);
       document.getElementById('modal')?.classList.add('dynamic-themed');
     } else {
       document.getElementById('modal')?.classList.remove('dynamic-themed');
     }
-  } catch(e) {
+  } catch (e) {
     console.warn('Canvas extraction blocked by CORS.', e);
   }
 }
@@ -3499,17 +3496,17 @@ function renderConciergeMessages() {
   if (!dom.conciergeMessages) return;
   updateConciergeLayoutState();
   dom.conciergeMessages.innerHTML = '';
-  
+
   conciergeMessages.forEach((msg) => {
     const el = document.createElement('div');
     const isUser = msg.role === 'user';
     el.className = `chat-message ${isUser ? 'user' : 'ai'}`;
-    
+
     const avatar = document.createElement('div');
     avatar.className = 'chat-msg-avatar';
     avatar.innerHTML = isUser ? '😊' : '🤖';
     el.appendChild(avatar);
-    
+
     const wrapper = document.createElement('div');
     wrapper.className = 'chat-message-body';
 
@@ -3517,12 +3514,12 @@ function renderConciergeMessages() {
     label.className = 'chat-message-label';
     label.textContent = isUser ? 'You' : 'Concierge';
     wrapper.appendChild(label);
-    
+
     const bubble = document.createElement('div');
     bubble.className = 'chat-bubble';
     bubble.textContent = msg.content;
     wrapper.appendChild(bubble);
-    
+
     if (msg.recommendations && msg.recommendations.length > 0) {
       const recsEl = document.createElement('div');
       recsEl.className = 'chat-movie-grid';
@@ -3547,18 +3544,18 @@ function renderConciergeMessages() {
       });
       wrapper.appendChild(recsEl);
     }
-    
+
     el.appendChild(wrapper);
     dom.conciergeMessages.appendChild(el);
   });
-  
+
   if (isConciergeTyping) {
     const typingEl = document.createElement('div');
     typingEl.className = 'chat-message ai';
     typingEl.innerHTML = `<div class="chat-msg-avatar">🤖</div><div class="typing-indicator"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
     dom.conciergeMessages.appendChild(typingEl);
   }
-  
+
   dom.conciergeMessages.scrollTop = dom.conciergeMessages.scrollHeight;
 }
 
@@ -3571,23 +3568,23 @@ function submitConciergePrompt(prompt) {
 async function sendConciergeMessage() {
   const text = dom.conciergeInput.value.trim();
   if (!text) return;
-  
+
   dom.conciergeInput.value = '';
   conciergeMessages.push({ role: 'user', content: text });
   isConciergeTyping = true;
   renderConciergeMessages();
-  
+
   try {
     const res = await fetch(`${getMlBase()}/api/concierge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: conciergeMessages })
     });
-    
+
     if (res.ok) {
       const data = await res.json();
-      conciergeMessages.push({ 
-        role: 'assistant', 
+      conciergeMessages.push({
+        role: 'assistant',
         content: data.reply,
         recommendations: data.recommendations || []
       });
@@ -3598,7 +3595,7 @@ async function sendConciergeMessage() {
     console.error('Concierge Error:', error);
     conciergeMessages.push({ role: 'assistant', content: 'Connection to AI server failed. Ensure the ML server is running on port 5001.' });
   }
-  
+
   isConciergeTyping = false;
   renderConciergeMessages();
 }
@@ -3614,12 +3611,12 @@ function bindConciergeEvents() {
   }
 
   dom.smartMatchFab?.addEventListener('click', openConcierge);
-  
+
   const navSmartBtn = document.getElementById('mobile-nav-smart');
   if (navSmartBtn) navSmartBtn.addEventListener('click', openConcierge);
-  
+
   dom.conciergeSend?.addEventListener('click', sendConciergeMessage);
-  
+
   dom.conciergeInput?.addEventListener('keyup', (e) => {
     if (e.key === 'Enter') sendConciergeMessage();
   });
@@ -3630,7 +3627,7 @@ function bindConciergeEvents() {
       if (prompt) submitConciergePrompt(prompt);
     });
   });
-  
+
   dom.conciergeClose?.addEventListener('click', () => {
     setOverlayState(null);
   });

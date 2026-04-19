@@ -3,6 +3,14 @@
     {
       "source": "/api/tmdb/:path*",
       "destination": "/api/tmdb.js"
+    },
+    {
+      "source": "/api/omdb",
+      "destination": "/api/omdb.js"
+    },
+    {
+      "source": "/api/config",
+      "destination": "/api/config.js"
     }
   ]
 }
