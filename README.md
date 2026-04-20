@@ -188,7 +188,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-Made with ❤️ by [Mimanshu Gahlaut](https://github.com/mimanshugahlaut)
+Made by [Mimanshu Gahlaut](https://github.com/mimanshugahlaut)
 
 ⭐ Star this repo if you found it useful!
 
